@@ -31,6 +31,8 @@ public:
 	double NoiseScale = 0.1;
 	UPROPERTY(EditAnywhere)
 	double Scale = 100;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool DoCull = false;
 
 	TArray<FVoxel> Voxels;
 
@@ -40,4 +42,10 @@ public:
 	FVoxel& GetVoxel(uint32 X, uint32 Y, uint32 Z);
 
 	virtual void OnRegister() override;
+
+	TOptional<FPlane> GetCameraPlane();
+
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+	float RefreshTimer = 0;
 };

@@ -14,6 +14,7 @@ struct FQuad
 
 void UVoxelMeshComponent::OnRegister()
 {
+    PrimaryComponentTick.bCanEverTick = true;
     Super::OnRegister();
     Voxels.Empty();
     Voxels.SetNum(SizeX * SizeY * SizeZ);
@@ -22,8 +23,16 @@ void UVoxelMeshComponent::OnRegister()
 
 void UVoxelMeshComponent::RefreshMesh()
 {
-    const auto f = [this](uint32 x, uint32 y, uint32 z) {
-        return GetVoxel(x, y, z).Filled;
+    TOptional<FPlane> CameraPlane = GetCameraPlane();
+    const auto f = [this, &CameraPlane](uint32 x, uint32 y, uint32 z) {
+        const FVoxel& V = GetVoxel(x, y, z);
+        if (DoCull && V.Filled && CameraPlane.IsSet())
+        {
+            FPlane Plane = CameraPlane.GetValue();
+            FVector Pos = FVector{ static_cast<double>(x), static_cast<double>(y), static_cast<double>(z)} * Scale;
+            return Plane.PlaneDot(Pos) < 0;
+        }
+        return V.Filled;
     };
 
     TArray<FVector> Vertices;
@@ -177,4 +186,33 @@ FVoxel& UVoxelMeshComponent::GetVoxel(uint32 X, uint32 Y, uint32 Z)
         V.Cached = true;
     }
     return V;
+}
+
+TOptional<FPlane> UVoxelMeshComponent::GetCameraPlane()
+{
+    if (UWorld* World = GetWorld())
+    {
+        if (auto* PlayerController = World->GetFirstPlayerController())
+        {
+            APlayerCameraManager* PlayerCamera = PlayerController->PlayerCameraManager;
+            AActor* CameraFocus = PlayerCamera->GetViewTarget();
+            FVector CameraLocation = PlayerCamera->GetCameraLocation();
+            FVector PlaneLocation = CameraFocus->GetActorLocation();
+            FVector PlaneNormal = (CameraLocation - PlaneLocation).GetSafeNormal(0.01);
+            return FPlane(PlaneLocation, PlaneNormal);
+        }
+    }
+    return FPlane();
+}
+
+void UVoxelMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    RefreshTimer -= DeltaTime;
+    if (RefreshTimer <= 0)
+    {
+        RefreshMesh();
+        RefreshTimer = 0.03;
+    }
 }
